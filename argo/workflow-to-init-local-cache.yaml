@@ -1,0 +1,19 @@
+# test workflow template
+
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  # generateName: <project-name>-init-local-cache-
+  generateName: <project-name>-init-local-cache-
+  namespace: argo-workspace
+spec:
+  workflowTemplateRef:
+    name: workflow-template-build-create-local-cache-template
+  arguments:
+    parameters: 
+      - name: revision
+        value: master
+
+
+
+        

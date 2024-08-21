@@ -1,0 +1,114 @@
+# SUMMARY:
+# Build and push an image using Docker Buildkit.
+#
+# Stages:
+# * clone the Git repository
+# * build and push the image 
+#
+# USAGE:
+# Publishing images requires an access token. For hub.docker.com you can create one at https://hub.docker.com/settings/security
+# This needs to be mounted as `$DOCKER_CONFIG/config.json`. To do this, you'll need to create a secret as follows:
+#
+#    export DOCKER_USERNAME=******
+#    export DOCKER_TOKEN=******
+#    kubectl create secret generic docker-config --from-literal="config.json={\"auths\": {\"https://index.docker.io/v1/\": {\"auth\": \"$(echo -n $DOCKER_USERNAME:$DOCKER_TOKEN|base64)\"}}}"
+#
+# REFERENCES:
+#
+# * https://github.com/moby/buildkit
+# * https://hub.docker.com/r/moby/buildkit
+#
+# input parameters from argo events 
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: workflow-template-build-template
+  namespace: argo-workspace
+spec:
+  arguments:
+    parameters:
+      - name: image-registry
+        value: <registry-url>
+      - name: cache-registry
+        value: <registry-url>
+      - name: project
+        value: <project-name>
+      - name: repo
+        value: <repo-name>
+      - name: revision
+        value: <revision-name>
+  entrypoint: ci
+  templates:
+    - name: ci
+      dag:
+        tasks:
+          - name: build
+            template: build
+    - name: build
+      volumes: 
+      - name: workspace
+        emptyDir: { }
+      - name: build-cache
+        persistentVolumeClaim:
+          claimName: build-cache
+      # Mount the configuration so we can push the image.
+      # This should create the /.docker/config.json file.
+      - name: docker-config
+        secret:
+          secretName: harbor-hk
+      containerSet: 
+        containers: 
+        - name: code-clone
+          image: "alpine/git:v2.43.4"
+          workingDir: /workspace
+          # Do a shallow clone, which is the fastest way to clone, by using the
+          # --depth, --branch, and --single-branch options
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            git clone --depth 1 --single-branch --branch {{workflow.parameters.revision}} {{workflow.parameters.repo}} . || exit 1
+            GIT_COMMIT_HASH=`git rev-parse --short=10 HEAD` 
+            NOW_DATE=`date +"%Y%m%d%H%M"`
+            GIT_BRANCH_NAME="{{workflow.parameters.revision}}"
+            echo "${NOW_DATE}-${GIT_COMMIT_HASH}-${GIT_BRANCH_NAME}" > image_info.txt
+          volumeMounts:
+            - mountPath: /workspace
+              name: workspace
+
+        - name: image-build
+          dependencies: ["code-clone"]
+          readinessProbe:
+            exec:
+              command: [ sh, -c, "buildctl debug workers" ]
+          image: moby/buildkit:v0.14.1
+          securityContext:
+            privileged: true
+          env:
+            # # only work with rootless
+            # - name: BUILDKITD_FLAGS
+            #   value: --oci-worker-no-process-sandbox
+            - name: DOCKER_CONFIG
+              value: /.docker
+          workingDir: /workspace
+          command: ["/bin/sh", "-c"]
+          args:
+          - |
+            IMAGE_TAG=`cat image_info.txt`
+            buildctl-daemonless.sh build \
+            --opt platform=linux/amd64 \
+            --frontend dockerfile.v0 \
+            --local context=. \
+            --local dockerfile=. \
+            --import-cache type=local,src=/var/lib/buildkit/cache/{{workflow.parameters.project}} \
+            --import-cache type=registry,ref={{workflow.parameters.cache-registry}}/{{workflow.parameters.project}}-cache:{{workflow.parameters.revision}} \
+            --export-cache type=registry,ref={{workflow.parameters.cache-registry}}/{{workflow.parameters.project}}-cache:{{workflow.parameters.revision}},image-manifest=true \
+            --output type=image,name={{workflow.parameters.image-registry}}/{{workflow.parameters.project}}:$IMAGE_TAG,push=true
+
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: build-cache
+              mountPath: /var/lib/buildkit/
+            - name: docker-config
+              readOnly: true
+              mountPath: /.docker
