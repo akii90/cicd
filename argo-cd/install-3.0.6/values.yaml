@@ -1,0 +1,76 @@
+fullnameOverride: "argocd"
+
+global:
+  # Set your own storage class
+  defaultStorageClass: "<your-storage-class>"
+
+config:
+  secret:
+    argocdServerAdminPassword: "password"
+
+controller:
+  # Need to run as a singe instance
+  replicaCount: 1
+  nodeSelector: {}
+  tolerations: {}
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 2Gi
+
+applicationSet:
+  enabled: true
+  nodeSelector: {}
+  tolerations: {}
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 1
+      memory: 512Mi
+  # Need to set to true, otherwise the service will not be able to start
+  serviceAccount:
+    automountServiceAccountToken: true
+
+server:
+  replicaCount: 1
+  nodeSelector: {}
+  tolerations: {}
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  ingress:
+    enabled: true
+    pathType: Prefix
+    hostname: "argocd.local"
+    path: /
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-passthrough: "true"
+      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    tls: true
+    ingressClassName: "<your-ingress-class-name>"
+
+repoServer:
+  replicaCount: 1
+  nodeSelector: {}
+  tolerations: {}
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+redis:
+  master:
+    persistence:
+      size: 10Gi
