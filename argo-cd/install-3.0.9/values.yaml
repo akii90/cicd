@@ -2,7 +2,7 @@ fullnameOverride: "argocd"
 
 global:
   # Set your own storage class
-  defaultStorageClass: "<your-storage-class>"
+  defaultStorageClass: "hostpath"
 
 config:
   secret:
@@ -12,11 +12,12 @@ controller:
   # Need to run as a singe instance
   replicaCount: 1
   nodeSelector: {}
-  tolerations: {}
+  tolerations: []
+  # Set more resources for controller in production
   resources:
     requests:
-      cpu: 50m
-      memory: 256Mi
+      cpu: 10m
+      memory: 64Mi
     limits:
       cpu: 1
       memory: 2Gi
@@ -24,7 +25,7 @@ controller:
 applicationSet:
   enabled: true
   nodeSelector: {}
-  tolerations: {}
+  tolerations: []
   resources:
     requests:
       cpu: 10m
@@ -39,7 +40,7 @@ applicationSet:
 server:
   replicaCount: 1
   nodeSelector: {}
-  tolerations: {}
+  tolerations: []
   resources:
     requests:
       cpu: 10m
@@ -56,12 +57,12 @@ server:
       nginx.ingress.kubernetes.io/ssl-passthrough: "true"
       nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
     tls: true
-    ingressClassName: "<your-ingress-class-name>"
+    ingressClassName: "ingress-nginx"
 
 repoServer:
   replicaCount: 1
   nodeSelector: {}
-  tolerations: {}
+  tolerations: []
   resources:
     requests:
       cpu: 10m
